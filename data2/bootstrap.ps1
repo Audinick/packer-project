@@ -1,0 +1,69 @@
+# Set network location to Private
+$networkListManager = [Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]'{DCB00C01-570F-4A9B-8D69-199FDBA5723B}'))
+$connections = $networkListManager.GetNetworkConnections()
+$connections |ForEach-Object {
+    Write-Host "Setting network config"
+    $_.GetNetwork().GetName() + ' category was previously set to ' + $_.GetNetwork().GetCategory() | Out-File C:\Windows\Temp\logfile.txt
+    $_.GetNetwork().SetCategory(1)
+    $_.GetNetwork().GetName() + ' change to ' + $_.GetNetwork().GetCategory() | Out-File C:\Windows\Temp\logfile.txt -Append
+}
+
+# Function to install Virtio and QEMU Guest Agent
+function Enable-Virtio {
+    Write-Host "Installing Virtio Drivers"
+    $drives = Get-PSDrive -PSProvider 'FileSystem'
+    foreach ($drive in $drives) {
+        $virtioMsi = Join-Path $drive.Root 'virtio-win-gt-x64.msi'
+        if (Test-Path $virtioMsi) {
+            Start-Process msiexec -Wait -ArgumentList '/i', $virtioMsi, '/log', 'C:\Windows\Temp\qemu-drivers.log', '/qn', '/passive', '/norestart', 'ADDLOCAL=ALL' -ErrorAction SilentlyContinue
+        }
+
+        $qemuAgentMsi = Join-Path $drive.Root 'guest-agent\qemu-ga-x86_64.msi'
+        if (Test-Path $qemuAgentMsi) {
+            Start-Process msiexec -Wait -ArgumentList '/i', $qemuAgentMsi, '/log', 'C:\Windows\Temp\qemu-guest-agent.log', '/qn', '/passive', '/norestart', 'ADDLOCAL=ALL' -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (Get-Service -Name QEMU-GA -ErrorAction SilentlyContinue) {
+        Write-Host "Starting QEMU Guest Agent"
+        Start-Service -Name QEMU-GA -ErrorAction SilentlyContinue
+    }
+
+    if (Get-Service -Name spice-agent -ErrorAction SilentlyContinue) {
+        Write-Host "Starting SPICE"
+        Start-Service -Name spice-agent -ErrorAction SilentlyContinue
+    }
+}
+
+# Function to enable and configure WinRM
+function Enable-WinRM {
+    Write-Host "Enable WinRM"
+    netsh advfirewall firewall set rule group="remote administration" new enable=yes
+    netsh advfirewall firewall add rule name="WinRM open Port 5985" dir=in action=allow protocol=TCP localport=5985
+
+    winrm quickconfig -q
+    winrm quickconfig -transport:http
+    winrm set winrm/config '@{MaxTimeoutms="7200000"}'
+    winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="0"}'
+    winrm set winrm/config/winrs '@{MaxProcessesPerShell="0"}'
+    winrm set winrm/config/winrs '@{MaxShellsPerUser="0"}'
+    winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+    winrm set winrm/config/service/auth '@{Basic="true"}'
+    winrm set winrm/config/client/auth '@{Basic="true"}'
+
+    net stop winrm
+    sc.exe config winrm start= auto
+    net start winrm
+}
+
+# Disabling automatic machine account password changes
+Write-Host "Disabling automatic machine account password changes"
+Get-WmiObject -Class Win32_UserAccount -Filter "name = 'Administrator'" | Set-WmiInstance -Arguments @{PasswordExpires = 0}
+
+$path = "HKLM:\System\CurrentControlSet\Services\Netlogon\Parameters"
+$key = try { Get-Item -Path $path -ErrorAction Stop } catch { New-Item -Path $path -Force }
+Set-ItemProperty -Path $key.PSPath -Name DisablePasswordChange -Value 1
+
+# Run functions
+Enable-Virtio
+Enable-WinRM
