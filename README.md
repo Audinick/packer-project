@@ -119,7 +119,7 @@ packer build -var-file=variables.pkrvars.hcl windows-server-2022.pkr.hcl
 
 ### Build Process
 
-The build typically takes 45-90 minutes and includes:
+The build typically takes 60 - 75 minutes and includes:
 
 1. **VM Creation** - Creates VM with specified resources
 2. **Windows Installation** - Automated via Autounattend.xml
@@ -128,7 +128,7 @@ The build typically takes 45-90 minutes and includes:
 5. **Phase 1 Provisioning** - Base configuration
 6. **Restart** - First reboot
 7. **Phase 2 Provisioning** - Additional setup
-8. **IIS Installation** - Installs web server role
+8. **IIS Installation** - Installs web server role (currently disabled)
 9. **Restart** - Second reboot
 10. **Optional Updates** - Windows Update (if enabled)
 11. **Disk Compression** - Reduces template size
@@ -260,5 +260,3 @@ Feel free to submit issues or pull requests for improvements.
 - [VirtIO Drivers](https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers)
 
 ---
-
-**Built with ❤️ for automated infrastructure**
