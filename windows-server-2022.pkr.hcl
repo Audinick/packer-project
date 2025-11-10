@@ -134,6 +134,30 @@ build {
         ]
     }
 
+    # Configure DNS servers
+    provisioner "powershell" {
+        inline = [
+            "Write-Host 'Configuring DNS servers...'",
+            "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object {",
+            "    Write-Host \"Setting DNS for adapter: $($_.Name)\"",
+            "    Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4','1.1.1.1')",
+            "}",
+            "",
+            "Write-Host 'Verifying DNS configuration...'",
+            "Get-DnsClientServerAddress -AddressFamily IPv4",
+            "",
+            "Write-Host 'Testing DNS resolution...'",
+            "nslookup google.com 8.8.8.8",
+            "",
+            "Write-Host 'Flushing DNS cache...'",
+            "ipconfig /flushdns",
+            "",
+            "Write-Host 'DNS configuration complete'",
+            "Start-Sleep -Seconds 10"
+        ]
+    }
+
+
     provisioner "powershell" {
         script = "./data2/phase-2.ps1"
     }
@@ -154,15 +178,65 @@ build {
         ]
     }
 
-    # Optional windows update
-    #provisioner "windows-update" {
-    #    search_criteria = "IsInstalled=0"
-    #    update_limit = 10
-    #}
+    # Test network connectivity before updates
+    provisioner "powershell" {
+        inline = [
+            "Write-Host '========================================='",
+            "Write-Host 'Testing network connectivity...'",
+            "Write-Host '========================================='",
+            "",
+            "Write-Host 'Testing DNS resolution...'",
+            "nslookup update.microsoft.com",
+            "nslookup download.windowsupdate.com",
+            "",
+            "Write-Host 'Testing connectivity to Microsoft Update servers...'",
+            "Test-NetConnection update.microsoft.com -Port 443 -InformationLevel Detailed",
+            "Test-NetConnection download.windowsupdate.com -Port 443 -InformationLevel Detailed",
+            "",
+            "Write-Host 'Checking Windows Update service status...'",
+            "Get-Service wuauserv | Format-List *",
+            "",
+            "Write-Host 'Testing general internet connectivity...'",
+            "Test-NetConnection google.com -Port 443",
+            "",
+            "Write-Host '========================================='",
+            "Write-Host 'Network test complete. Waiting before updates...'",
+            "Write-Host '========================================='",
+            "Start-Sleep -Seconds 30"
+        ]
+    }
+
+    # Prepare Windows Update service
+    provisioner "powershell" {
+        inline = [
+            "Write-Host 'Configuring Windows Update service...'",
+            "Stop-Service wuauserv -Force -ErrorAction SilentlyContinue",
+            "Start-Sleep -Seconds 5",
+            "Start-Service wuauserv",
+            "Set-Service wuauserv -StartupType Manual",
+            "",
+            "Write-Host 'Waiting for Windows Update to initialize...'",
+            "Start-Sleep -Seconds 60"
+        ]
+    }
+
+    # Windows updates
+    provisioner "windows-update" {
+        search_criteria = "IsInstalled=0"
+        update_limit = 25
+        filters = [
+            "exclude:$_.Title -like '*Preview*'",
+            "include:$true"
+        ]
+    }
 
     provisioner "powershell" {
         script = "./data2/phase-5d.windows-compress.ps1"
     }
+
+ #   provisioner "powershell" {
+ #       script = "./data2/phase-5d.windows-compress.ps1"
+ #   }
 
     provisioner "file" {
         source      = "./data2/unattend.xml"
