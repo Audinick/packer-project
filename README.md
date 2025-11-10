@@ -119,7 +119,7 @@ packer build -var-file=variables.pkrvars.hcl windows-server-2022.pkr.hcl
 
 ### Build Process
 
-The build typically takes 15-17 minutes and includes:
+The build typically takes 60 - 75 minutes and includes:
 
 1. **VM Creation** - Creates VM with specified resources
 2. **Windows Installation** - Automated via Autounattend.xml
